@@ -170,3 +170,62 @@ struct BinaryIndexedTreeImpl(T)
             _data[i] += x;
     }
 }
+
+struct SegTree(T, alias func = "a+b")
+{
+    T[] tree;
+    T[] data;
+    T base;
+
+    this(long size, T base)
+    {
+        long len = 1;
+        while (len < size)
+            len *= 2;
+        this.tree = new T[](len * 2 - 1);
+        this.data = this.tree[len - 1 .. $];
+        this.tree[] = this.base = base;
+    }
+
+    this(T[] init, T base)
+    {
+        long len = 1;
+        while (len < init.length)
+            len *= 2;
+        this.tree = new T[](len * 2 - 1);
+        this.data = this.tree[len - 1 .. $];
+        this.data[init.length .. $] = this.base = base;
+        this.data[0 .. init.length] = init[];
+        foreach_reverse (i; 0 .. len - 1)
+            this.tree[i] = binaryFun!(func)(this.tree[i * 2 + 1], this.tree[i * 2 + 2]);
+    }
+
+    void update(long i, T value)
+    {
+        this.data[i] = value;
+        long p = this.data.length - 1 + i;
+        while (0 < p)
+        {
+            p = (p - 1) / 2;
+            this.tree[p] = binaryFun!(func)(this.tree[p * 2 + 1], this.tree[p * 2 + 2]);
+        }
+    }
+
+    T query(long l, long r)
+    {
+        return queryImpl(l, r, 0L, 0L, cast(long) this.data.length - 1L);
+    }
+
+    T queryImpl(long a, long b, long i, long l, long r)
+    {
+        if (a <= l && r <= b)
+            return this.tree[i];
+        if (r < a || b < l)
+            return this.base;
+        if (r < l)
+            return base;
+        T x = queryImpl(a, b, i * 2 + 2, l + (r - l) / 2 + 1, r);
+        T y = queryImpl(a, b, i * 2 + 1, l, l + (r - l) / 2);
+        return binaryFun!(func)(x, y);
+    }
+}
