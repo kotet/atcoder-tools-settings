@@ -39,6 +39,6 @@ atcsubmit() {
     return
   fi
 
-  atcoder-tools submit
+  atcoder-tools submit -u
   popd
 }
