@@ -5,9 +5,15 @@ void scan(L...)(ref L A){auto l=readln.split;foreach(i,T;L){A[i]=l[i].to!T;}}ali
 void dprint(L...)(lazy L A){debug{auto l=new string[](L.length);static foreach(i,a;A)l[i]=a.text;arywrite(l);}}
 alias PQueue(T,alias l="b<a")=BinaryHeap!(Array!T,l);import std, core.bitop;
 // dfmt on
-{% if mod %}immutable long MOD = {{ mod }};{% endif %}
-{% if yes_str %}immutable string YES = "{{ yes_str }}";{% endif %}
-{% if no_str %}immutable string NO = "{{ no_str }}";{% endif %}
+{% if mod %}
+immutable long MOD = {{ mod }};
+{% endif %}
+{% if yes_str %}
+immutable string YES = "{{ yes_str }}";
+{% endif %}
+{% if no_str %}
+immutable string NO = "{{ no_str }}";
+{% endif %}
 void main()
 {
     {% if prediction_success %}
@@ -25,459 +31,6 @@ void solve({{ formal_arguments }})
 }
 {% endif %}
 
-// --- acl ---
-// --- dsu ---
-
-struct Dsu
-{
-public:
-    this(int n) @safe nothrow
-    {
-        _n = n, parent_or_size = new int[](n);
-        parent_or_size[] = -1;
-    }
-
-    int merge(int a, int b) @safe nothrow @nogc
-    {
-        assert(0 <= a && a < _n);
-        assert(0 <= b && b < _n);
-        int x = leader(a), y = leader(b);
-        if (x == y)
-            return x;
-        if (-parent_or_size[x] < -parent_or_size[y])
-        {
-            auto tmp = x;
-            x = y;
-            y = tmp;
-        }
-        parent_or_size[x] += parent_or_size[y];
-        parent_or_size[y] = x;
-        return x;
-    }
-
-    bool same(int a, int b) @safe nothrow @nogc
-    {
-        assert(0 <= a && a < _n);
-        assert(0 <= b && b < _n);
-        return leader(a) == leader(b);
-    }
-
-    int leader(int a) @safe nothrow @nogc
-    {
-        assert(0 <= a && a < _n);
-        if (parent_or_size[a] < 0)
-            return a;
-        return parent_or_size[a] = leader(parent_or_size[a]);
-    }
-
-    int size(int a) @safe nothrow @nogc
-    {
-        assert(0 <= a && a < _n);
-        return -parent_or_size[leader(a)];
-    }
-
-    int[][] groups() @safe nothrow
-    {
-        auto leader_buf = new int[](_n), group_size = new int[](_n);
-        foreach (i; 0 .. _n)
-        {
-            leader_buf[i] = leader(i);
-            group_size[leader_buf[i]]++;
-        }
-        auto result = new int[][](_n);
-        foreach (i; 0 .. _n)
-            result[i].reserve(group_size[i]);
-        foreach (i; 0 .. _n)
-            result[leader_buf[i]] ~= i;
-        int[][] filtered;
-        foreach (r; result)
-            if (r.length != 0)
-                filtered ~= r;
-        return filtered;
-    }
-
-private:
-    int _n;
-    int[] parent_or_size;
-}
-// --- fenwicktree ---
-
-struct FenwickTree(T)
-{
-    import std.traits : isSigned, Unsigned;
-
-    static if (isSigned!T)
-    {
-        alias U = Unsigned!T;
-    }
-    else
-    {
-        alias U = T;
-    }
-public:
-    this(int n) @safe nothrow
-    {
-        _n = n;
-        data = new U[](n);
-    }
-
-    void add(int p, T x) @safe nothrow @nogc
-    {
-        assert(0 <= p && p < _n);
-        p++;
-        while (p <= _n)
-        {
-            data[p - 1] += cast(U) x;
-            p += p & -p;
-        }
-    }
-
-    T sum(int l, int r) @safe nothrow @nogc
-    {
-        assert(0 <= l && l <= r && r <= _n);
-        return sum(r) - sum(l);
-    }
-
-private:
-    int _n;
-    U[] data;
-
-    U sum(int r) @safe nothrow @nogc
-    {
-        U s = 0;
-        while (r > 0)
-        {
-            s += data[r - 1];
-            r -= r & -r;
-        }
-        return s;
-    }
-}
-// --- internal_bit ---
-
-int celiPow2(int n) @safe pure nothrow @nogc
-{
-    int x = 0;
-    while ((1u << x) < cast(uint)(n))
-        x++;
-    return x;
-}
-// --- internal_scc ---
-
-struct CompressedSparseRow(E)
-{
-    import std.typecons : Tuple;
-
-    int[] start;
-    E[] elist;
-    this(int n, const ref Tuple!(int, E)[] edges) @safe nothrow
-    {
-        start = new typeof(start)(n + 1);
-        elist = new typeof(elist)(edges.length);
-        foreach (e; edges)
-            start[e[0] + 1]++;
-        foreach (i; 0 .. n)
-            start[i + 1] += start[i];
-        auto counter = start.dup;
-        foreach (e; edges)
-            elist[counter[e[0]]++] = e[1];
-    }
-}
-
-struct SccGraphImpl
-{
-    import std.typecons : Tuple;
-    import std.algorithm : min;
-
-public:
-    this(int n) @safe nothrow @nogc
-    {
-        _n = n;
-    }
-
-    int numVerticles() @safe nothrow @nogc
-    {
-        return _n;
-    }
-
-    void addEdge(int from, int to) @safe nothrow
-    {
-        edges ~= Tuple!(int, edge)(from, edge(to));
-    }
-
-    Tuple!(int, int[]) sccIds() @safe nothrow
-    {
-        auto g = CompressedSparseRow!(edge)(_n, edges);
-        int now_ord = 0, group_num = 0;
-        int[] visited;
-        auto low = new int[](_n);
-        auto ord = new int[](_n);
-        ord[] = -1;
-        auto ids = new int[](_n);
-        visited.reserve(_n);
-        void dfs(int v)
-        {
-            low[v] = ord[v] = now_ord++;
-            visited ~= v;
-            foreach (i; g.start[v] .. g.start[v + 1])
-            {
-                auto to = g.elist[i].to;
-                if (ord[to] == -1)
-                {
-                    dfs(to);
-                    low[v] = min(low[v], low[to]);
-                }
-                else
-                {
-                    low[v] = min(low[v], ord[to]);
-                }
-            }
-            if (low[v] == ord[v])
-            {
-                while (true)
-                {
-                    int u = visited[$ - 1];
-                    visited.length--;
-                    ord[u] = _n;
-                    ids[u] = group_num;
-                    if (u == v)
-                        break;
-                }
-                group_num++;
-            }
-        }
-
-        foreach (i; 0 .. _n)
-            if (ord[i] == -1)
-                dfs(i);
-        foreach (ref x; ids)
-            x = group_num - 1 - x;
-        return Tuple!(int, int[])(group_num, ids);
-    }
-
-    int[][] scc() @safe nothrow
-    {
-        auto ids = sccIds();
-        int group_num = ids[0];
-        auto counts = new int[](group_num);
-        foreach (x; ids[1])
-            counts[x]++;
-        auto groups = new int[][](ids[0]);
-        foreach (i; 0 .. group_num)
-            groups[i].reserve(counts[i]);
-        foreach (i; 0 .. _n)
-            groups[ids[1][i]] ~= i;
-        return groups;
-    }
-
-private:
-    int _n;
-    struct edge
-    {
-        int to;
-    }
-
-    Tuple!(int, edge)[] edges;
-}
-// --- convolution ---
-
-import std.traits : isInstanceOf, isIntegral;
-
-void butterfly(mint)(mint[] a) @safe nothrow @nogc
-        if (isInstanceOf!(StaticModInt, mint))
-{
-    import core.bitop : bsf;
-
-    static immutable int g = primitiveRoot!(mint.mod());
-    int n = cast(int) a.length;
-    int h = celiPow2(n);
-
-    static bool first = true;
-    static mint[30] sum_e;
-    if (first)
-    {
-        first = false;
-        mint[30] es, ies;
-        int cnt2 = bsf(mint.mod() - 1);
-        mint e = mint(g).pow((mint.mod() - 1) >> cnt2);
-        mint ie = e.inv();
-        foreach_reverse (i; 2 .. cnt2 + 1)
-        {
-            es[i - 2] = e;
-            ies[i - 2] = ie;
-            e *= e;
-            ie *= ie;
-        }
-        mint now = 1;
-        foreach (i; 0 .. cnt2 - 2 + 1)
-        {
-            sum_e[i] = es[i] * now;
-            now *= ies[i];
-        }
-    }
-    foreach (ph; 1 .. h + 1)
-    {
-        int w = 1 << (ph - 1), p = 1 << (h - ph);
-        mint now = 1;
-        foreach (s; 0 .. w)
-        {
-            int offset = s << (h - ph + 1);
-            foreach (i; 0 .. p)
-            {
-                auto l = a[i + offset];
-                auto r = a[i + offset + p] * now;
-                a[i + offset] = l + r;
-                a[i + offset + p] = l - r;
-            }
-            now *= sum_e[bsf(~(cast(uint) s))];
-        }
-    }
-}
-
-void butterflyInv(mint)(mint[] a) @safe nothrow @nogc
-        if (isInstanceOf!(StaticModInt, mint))
-{
-    import core.bitop : bsf;
-
-    static immutable int g = primitiveRoot!(mint.mod());
-    int n = cast(int) a.length;
-    int h = celiPow2(n);
-
-    static bool first = true;
-    static mint[30] sum_ie;
-    if (first)
-    {
-        first = false;
-        mint[30] es, ies;
-        int cnt2 = bsf(mint.mod() - 1);
-        mint e = mint(g).pow((mint.mod() - 1) >> cnt2);
-        mint ie = e.inv();
-        foreach_reverse (i; 2 .. cnt2 + 1)
-        {
-            es[i - 2] = e;
-            ies[i - 2] = ie;
-            e *= e;
-            ie *= ie;
-        }
-        mint now = 1;
-        foreach (i; 0 .. cnt2 - 2 + 1)
-        {
-            sum_ie[i] = ies[i] * now;
-            now *= es[i];
-        }
-    }
-
-    foreach_reverse (ph; 1 .. h + 1)
-    {
-        int w = 1 << (ph - 1), p = 1 << (h - ph);
-        mint inow = 1;
-        foreach (s; 0 .. w)
-        {
-            int offset = s << (h - ph + 1);
-            foreach (i; 0 .. p)
-            {
-                auto l = a[i + offset];
-                auto r = a[i + offset + p];
-                a[i + offset] = l + r;
-                a[i + offset + p] = mint(cast(ulong)(mint.mod() + l.val() - r.val()) * inow.val());
-            }
-            inow *= sum_ie[bsf(~(cast(uint) s))];
-        }
-    }
-}
-
-mint[] convolution(mint)(mint[] a, mint[] b) @safe nothrow 
-        if (isInstanceOf!(StaticModInt, mint))
-{
-    import std.algorithm : min, swap;
-
-    int n = cast(int) a.length, m = cast(int) b.length;
-    if (!n || !m)
-        return [];
-    if (min(n, m) <= 60)
-    {
-        if (n < m)
-        {
-            swap(n, m);
-            swap(a, b);
-        }
-        auto ans = new mint[](n + m - 1);
-        foreach (i; 0 .. n)
-            foreach (j; 0 .. m)
-                ans[i + j] += a[i] * b[j];
-        return ans;
-    }
-    int z = 1 << celiPow2(n + m - 1);
-    a.length = z;
-    butterfly(a);
-    b.length = z;
-    butterfly(b);
-    foreach (i; 0 .. z)
-        a[i] *= b[i];
-    butterflyInv(a);
-    a.length = n + m - 1;
-    mint iz = mint(z).inv();
-    foreach (i; 0 .. n + m - 1)
-        a[i] *= iz;
-    return a;
-}
-
-T[] convolution(uint mod = 998_244_353, T)(T[] a, T[] b) @safe nothrow 
-        if (isIntegral!(T))
-{
-    int n = cast(int)(a.length), m = cast(int)(b.length);
-    if (!n || !m)
-        return [];
-    alias mint = StaticModInt!(mod);
-    auto a2 = new mint[](n), b2 = new mint[](m);
-    foreach (i; 0 .. n)
-        a2[i] = mint(a[i]);
-    foreach (i; 0 .. m)
-        b2[i] = mint(b[i]);
-    auto c2 = convolution(a2, b2);
-    auto c = new T[](n + m - 1);
-    foreach (i; 0 .. n + m - 1)
-        c[i] = c2[i].val();
-    return c;
-}
-
-long[] convolutionLL(long[] a, long[] b) @safe nothrow
-{
-    int n = cast(int)(a.length), m = cast(int)(b.length);
-    if (!n || !m)
-        return [];
-    static immutable ulong MOD1 = 90 * (2 ^^ 23) + 1;
-    static immutable ulong MOD2 = 10 * (2 ^^ 24) + 1;
-    static immutable ulong MOD3 = 14 * (2 ^^ 25) + 1;
-    static assert(MOD1 == 754_974_721 && MOD2 == 167_772_161 && MOD3 == 469_762_049);
-    static immutable ulong M2M3 = MOD2 * MOD3;
-    static immutable ulong M1M3 = MOD1 * MOD3;
-    static immutable ulong M1M2 = MOD1 * MOD2;
-    static immutable ulong M1M2M3 = MOD1 * MOD2 * MOD3;
-    static immutable ulong i1 = invGcd(MOD2 * MOD3, MOD1)[1];
-    static immutable ulong i2 = invGcd(MOD1 * MOD3, MOD2)[1];
-    static immutable ulong i3 = invGcd(MOD1 * MOD2, MOD3)[1];
-
-    auto c1 = convolution!(MOD1)(a, b);
-    auto c2 = convolution!(MOD2)(a, b);
-    auto c3 = convolution!(MOD3)(a, b);
-
-    auto c = new long[](n + m - 1);
-    foreach (i; 0 .. n + m - 1)
-    {
-        ulong x;
-        x += (c1[i] * i1) % MOD1 * M2M3;
-        x += (c2[i] * i2) % MOD2 * M1M3;
-        x += (c3[i] * i3) % MOD3 * M1M2;
-        long diff = c1[i] - safeMod(cast(long) x, cast(long) MOD1);
-        if (diff < 0)
-            diff += MOD1;
-        static immutable ulong[5] offset = [0, 0, M1M2M3, 2 * M1M2M3, 3 * M1M2M3];
-        x -= offset[diff % 5];
-        c[i] = x;
-    }
-    return c;
-}
 // --- lazy_segtree ---
 
 struct LazySegTree(S, alias op, alias e, F, alias mapping, alias composition, alias id)
@@ -737,186 +290,855 @@ private:
         lz[k] = identity();
     }
 }
-// --- maxflow ---
+// --- internal_scc ---
 
-struct MFGraph(Cap)
+struct CompressedSparseRow(E)
 {
     import std.typecons : Tuple;
 
+    int[] start;
+    E[] elist;
+    this(int n, const ref Tuple!(int, E)[] edges) @safe nothrow
+    {
+        start = new typeof(start)(n + 1);
+        elist = new typeof(elist)(edges.length);
+        foreach (e; edges)
+            start[e[0] + 1]++;
+        foreach (i; 0 .. n)
+            start[i + 1] += start[i];
+        auto counter = start.dup;
+        foreach (e; edges)
+            elist[counter[e[0]]++] = e[1];
+    }
+}
+
+struct SccGraphImpl
+{
+    import std.typecons : Tuple;
+    import std.algorithm : min;
+
 public:
-    this(int n)
+    this(int n) @safe nothrow @nogc
     {
         _n = n;
-        g = new _edge[][](n);
     }
 
-    int addEdge(int from, int to, Cap cap)
+    int numVerticles() @safe nothrow @nogc
     {
-        assert(0 <= from && from < _n);
-        assert(0 <= to && to < _n);
-        assert(0 <= cap);
-        int m = cast(int) pos.length;
-        pos ~= Tuple!(int, int)(from, cast(int)(g[from].length));
-        int from_id = cast(int) g[from].length;
-        int to_id = cast(int) g[to].length;
-        if (from == to)
-            to_id++;
-        g[from] ~= _edge(to, to_id, cap);
-        g[to] ~= _edge(from, from_id, 0);
-        return m;
+        return _n;
     }
 
-    struct Edge
+    void addEdge(int from, int to) @safe nothrow
     {
-        int from, to;
-        Cap cap, flow;
+        edges ~= Tuple!(int, edge)(from, edge(to));
     }
 
-    Edge getEdge(int i)
+    Tuple!(int, int[]) sccIds() @safe nothrow
     {
-        int m = cast(int)(pos.length);
-        assert(0 <= i && i < m);
-        auto _e = g[pos[i][0]][pos[i][1]];
-        auto _re = g[_e.to][_e.rev];
-        return Edge(pos[i][0], _e.to, _e.cap + _re.cap, _re.cap);
-    }
-
-    Edge[] edges()
-    {
-        int m = cast(int)(pos.length);
-        Edge[] result;
-        foreach (i; 0 .. m)
-            result ~= getEdge(i);
-        return result;
-    }
-
-    void changeEdge(int i, Cap new_cap, Cap new_flow)
-    {
-        int m = cast(int)(pos.length);
-        assert(0 <= i && i < m);
-        assert(0 <= new_flow && new_flow <= new_cap);
-        auto _e = &g[pos[i][0]][pos[i][1]];
-        auto _re = &g[_e.to][_e.rev];
-        _e.cap = new_cap - new_flow;
-        _re.cap = new_flow;
-    }
-
-    Cap flow(int s, int t)
-    {
-        return flow(s, t, Cap.max);
-    }
-
-    Cap flow(int s, int t, Cap flow_limit)
-    {
-        import std.container : DList;
-        import std.algorithm : min;
-
-        assert(0 <= s && s < _n);
-        assert(0 <= t && t < _n);
-        assert(s != t);
-
-        auto level = new int[](_n), iter = new int[](_n);
-        DList!int que;
-
-        void bfs()
+        auto g = CompressedSparseRow!(edge)(_n, edges);
+        int now_ord = 0, group_num = 0;
+        int[] visited;
+        auto low = new int[](_n);
+        auto ord = new int[](_n);
+        ord[] = -1;
+        auto ids = new int[](_n);
+        visited.reserve(_n);
+        void dfs(int v)
         {
-            level[] = -1;
-            level[s] = 0;
-            que.clear();
-            que.insertBack(s);
-            while (!que.empty)
+            low[v] = ord[v] = now_ord++;
+            visited ~= v;
+            foreach (i; g.start[v] .. g.start[v + 1])
             {
-                int v = que.front;
-                que.removeFront();
-                foreach (e; g[v])
+                auto to = g.elist[i].to;
+                if (ord[to] == -1)
                 {
-                    if (e.cap == 0 || level[e.to] >= 0)
-                        continue;
-                    level[e.to] = level[v] + 1;
-                    if (e.to == t)
-                        return;
-                    que.insertBack(e.to);
+                    dfs(to);
+                    low[v] = min(low[v], low[to]);
+                }
+                else
+                {
+                    low[v] = min(low[v], ord[to]);
                 }
             }
-        }
-
-        Cap dfs(int v, Cap up)
-        {
-            if (v == s)
-                return up;
-            Cap res = 0;
-            int level_v = level[v];
-            for (; iter[v] < cast(int)(g[v].length); iter[v]++)
+            if (low[v] == ord[v])
             {
-                auto i = iter[v];
-                auto e = g[v][i];
-                if (level_v <= level[e.to] || g[e.to][e.rev].cap == 0)
-                    continue;
-                Cap d = dfs(e.to, min(up - res, g[e.to][e.rev].cap));
-                if (d <= 0)
-                    continue;
-                g[v][i].cap += d;
-                g[e.to][e.rev].cap -= d;
-                res += d;
-                if (res == up)
-                    break;
-            }
-            return res;
-        }
-
-        Cap flow = 0;
-        while (flow < flow_limit)
-        {
-            bfs();
-            if (level[t] == -1)
-                break;
-            iter[] = 0;
-            while (flow < flow_limit)
-            {
-                Cap f = dfs(t, flow_limit - flow);
-                if (!f)
-                    break;
-                flow += f;
+                while (true)
+                {
+                    int u = visited[$ - 1];
+                    visited.length--;
+                    ord[u] = _n;
+                    ids[u] = group_num;
+                    if (u == v)
+                        break;
+                }
+                group_num++;
             }
         }
-        return flow;
+
+        foreach (i; 0 .. _n)
+            if (ord[i] == -1)
+                dfs(i);
+        foreach (ref x; ids)
+            x = group_num - 1 - x;
+        return Tuple!(int, int[])(group_num, ids);
     }
 
-    bool[] minCut(int s)
+    int[][] scc() @safe nothrow
     {
-        import std.container : DList;
-
-        auto visited = new bool[](_n);
-        DList!int que;
-        que.insertBack(s);
-        while (!que.empty)
-        {
-            int p = que.front;
-            que.removeFront();
-            visited[p] = true;
-            foreach (e; g[p])
-            {
-                if (e.cap && !visited[e.to])
-                {
-                    visited[e.to] = true;
-                    que.insertBack(e.to);
-                }
-            }
-        }
-        return visited;
+        auto ids = sccIds();
+        int group_num = ids[0];
+        auto counts = new int[](group_num);
+        foreach (x; ids[1])
+            counts[x]++;
+        auto groups = new int[][](ids[0]);
+        foreach (i; 0 .. group_num)
+            groups[i].reserve(counts[i]);
+        foreach (i; 0 .. _n)
+            groups[ids[1][i]] ~= i;
+        return groups;
     }
 
 private:
-    struct _edge
+    int _n;
+    struct edge
     {
-        int to, rev;
-        Cap cap;
+        int to;
     }
 
-    int _n;
-    Tuple!(int, int)[] pos;
-    _edge[][] g;
+    Tuple!(int, edge)[] edges;
 }
+// --- fenwicktree ---
+
+struct FenwickTree(T)
+{
+    import std.traits : isSigned, Unsigned;
+
+    static if (isSigned!T)
+    {
+        alias U = Unsigned!T;
+    }
+    else
+    {
+        alias U = T;
+    }
+public:
+    this(int n) @safe nothrow
+    {
+        _n = n;
+        data = new U[](n);
+    }
+
+    void add(int p, T x) @safe nothrow @nogc
+    {
+        assert(0 <= p && p < _n);
+        p++;
+        while (p <= _n)
+        {
+            data[p - 1] += cast(U) x;
+            p += p & -p;
+        }
+    }
+
+    T sum(int l, int r) @safe nothrow @nogc
+    {
+        assert(0 <= l && l <= r && r <= _n);
+        return sum(r) - sum(l);
+    }
+
+private:
+    int _n;
+    U[] data;
+
+    U sum(int r) @safe nothrow @nogc
+    {
+        U s = 0;
+        while (r > 0)
+        {
+            s += data[r - 1];
+            r -= r & -r;
+        }
+        return s;
+    }
+}
+// --- scc ---
+
+struct SccGraph
+{
+    this(int n) @safe nothrow
+    {
+        internal = SccGraphImpl(n);
+    }
+
+    void addEdge(int from, int to) @safe nothrow
+    {
+        int n = internal.numVerticles();
+        assert(0 <= from && from < n);
+        assert(0 <= to && to < n);
+        internal.addEdge(from, to);
+    }
+
+    int[][] scc() @safe nothrow
+    {
+        return internal.scc();
+    }
+
+private:
+    SccGraphImpl internal;
+}
+// --- internal_math ---
+
+import std.typecons : Tuple;
+
+/// Return: `x mod m`
+/// Param: `1 <= m`
+ulong safeMod(long x, long m) @safe pure nothrow @nogc
+{
+    x %= m;
+    if (x < 0)
+        x += m;
+    return x;
+}
+
+/// Return: `a*b` (128bit width)
+ulong[2] umul128(ulong a, ulong b) @safe @nogc pure nothrow
+{
+    immutable ulong au = a >> 32;
+    immutable ulong bu = b >> 32;
+    immutable ulong al = a & ((1UL << 32) - 1);
+    immutable ulong bl = b & ((1UL << 32) - 1);
+
+    ulong t = al * bl;
+    immutable ulong w3 = t & ((1UL << 32) - 1);
+    ulong k = t >> 32;
+    t = au * bl + k;
+
+    k = t & ((1UL << 32) - 1);
+    immutable ulong w1 = t >> 32;
+    t = al * bu + k;
+    k = t >> 32;
+    return [au * bu + w1 + k, t << 32 + w3];
+}
+
+/// Fast modular multiplication by barrett reduction
+/// Reference: https://en.wikipedia.org/wiki/Barrett_reduction
+/// NOTE: reconsider after Ice Lake
+struct Barrett
+{
+    ///
+    uint _m;
+    ///
+    ulong im;
+    /// Param: `1 <= m < 2^31`
+    this(uint m) @safe @nogc pure nothrow
+    {
+        _m = m;
+        im = (cast(ulong)(-1)) / m + 1;
+    }
+
+    /// Return: `m`
+    uint umod() @safe @nogc pure nothrow
+    {
+        return _m;
+    }
+
+    /// Param: `0 <= a < m`, `0 <= b < m`
+    /// Return: `a * b % m`
+    uint mul(uint a, uint b) @safe @nogc pure nothrow
+    {
+        ulong z = a;
+        z *= b;
+        immutable ulong x = umul128(z, im)[0];
+        uint v = cast(uint)(z - x * _m);
+        if (_m <= v)
+            v += _m;
+        return v;
+    }
+}
+
+/// Param: `0 <= n`, `1 <= m`
+/// Return: `(x ^^ n) % m`
+long ctPowMod(long x, long n, int m) @safe pure nothrow @nogc
+{
+    if (m == 1)
+        return 0;
+    uint _m = cast(uint) m;
+    ulong r = 1;
+    ulong y = safeMod(x, m);
+    while (n)
+    {
+        if (n & 1)
+            r = (r * y) % _m;
+        y = (y * y) % _m;
+        n >>= 1;
+    }
+    return r;
+}
+
+/// Reference:
+/// M. Forisek and J. Jancina,
+/// Fast Primality Testing for Integers That Fit into a Machine Word
+/// Param: `0 <= n`
+bool ctIsPrime(int n) @safe pure nothrow @nogc
+{
+    if (n <= 1)
+        return false;
+    if (n == 2 || n == 7 || n == 61)
+        return true;
+    if (n % 2 == 0)
+        return false;
+    long d = n - 1;
+    while (d % 2 == 0)
+        d /= 2;
+    foreach (a; [2, 7, 61])
+    {
+        long t = d;
+        long y = ctPowMod(a, t, n);
+        while (t != n - 1 && y != 1 && y != n - 1)
+        {
+            y = y * y % n;
+            t <<= 1;
+        }
+        if (y != n - 1 && t % 2 == 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// ditto
+enum bool isPrime(int n) = ctIsPrime(n);
+
+/// Param: `1 <= b`
+/// Return: `pair(g, x)` s.t. `g = gcd(a, b)`, `x*a = g (mod b)`, `0 <= x < b/g`
+Tuple!(long, long) invGcd(long a, long b) @safe pure nothrow @nogc
+{
+    a = safeMod(a, b);
+    if (a == 0)
+        return Tuple!(long, long)(b, 0);
+    long s = b, t = a, m0 = 0, m1 = 1;
+    while (t)
+    {
+        immutable long u = s / t;
+        s -= t * u;
+        m0 -= m1 * u;
+        long tmp = s;
+        s = t;
+        t = tmp;
+        tmp = m0;
+        m0 = m1;
+        m1 = tmp;
+    }
+    if (m0 < 0)
+        m0 += b / s;
+    return Tuple!(long, long)(s, m0);
+}
+
+/// Compile time primitive root
+/// Param: m must be prime
+/// Return: primitive root (and minimum in now)
+int ctPrimitiveRoot(int m) @safe pure nothrow @nogc
+{
+    if (m == 2)
+        return 1;
+    if (m == 167_772_161)
+        return 3;
+    if (m == 469_762_049)
+        return 3;
+    if (m == 754_974_721)
+        return 11;
+    if (m == 998_244_353)
+        return 3;
+    int[20] divs;
+    divs[0] = 2;
+    int cnt = 1;
+    int x = (m - 1) / 2;
+    while (x % 2 == 0)
+        x /= 2;
+    for (int i = 3; (cast(long) i) * i <= x; i += 2)
+        if (x % i == 0)
+        {
+            divs[cnt++] = i;
+            while (x % i == 0)
+                x /= i;
+        }
+    if (x > 1)
+        divs[cnt++] = x;
+    for (int g = 2;; g++)
+    {
+        bool ok = true;
+        foreach (i; 0 .. cnt)
+            if (ctPowMod(g, (m - 1) / divs[i], m) == 1)
+            {
+                ok = false;
+                break;
+            }
+        if (ok)
+            return g;
+    }
+}
+
+/// ditto
+enum primitiveRoot(int m) = ctPrimitiveRoot(m);
+// --- internal_bit ---
+
+int celiPow2(int n) @safe pure nothrow @nogc
+{
+    int x = 0;
+    while ((1u << x) < cast(uint)(n))
+        x++;
+    return x;
+}
+// --- convolution ---
+
+import std.traits : isInstanceOf, isIntegral;
+
+void butterfly(mint)(mint[] a) @safe nothrow @nogc
+        if (isInstanceOf!(StaticModInt, mint))
+{
+    import core.bitop : bsf;
+
+    static immutable int g = primitiveRoot!(mint.mod());
+    int n = cast(int) a.length;
+    int h = celiPow2(n);
+
+    static bool first = true;
+    static mint[30] sum_e;
+    if (first)
+    {
+        first = false;
+        mint[30] es, ies;
+        int cnt2 = bsf(mint.mod() - 1);
+        mint e = mint(g).pow((mint.mod() - 1) >> cnt2);
+        mint ie = e.inv();
+        foreach_reverse (i; 2 .. cnt2 + 1)
+        {
+            es[i - 2] = e;
+            ies[i - 2] = ie;
+            e *= e;
+            ie *= ie;
+        }
+        mint now = 1;
+        foreach (i; 0 .. cnt2 - 2 + 1)
+        {
+            sum_e[i] = es[i] * now;
+            now *= ies[i];
+        }
+    }
+    foreach (ph; 1 .. h + 1)
+    {
+        int w = 1 << (ph - 1), p = 1 << (h - ph);
+        mint now = 1;
+        foreach (s; 0 .. w)
+        {
+            int offset = s << (h - ph + 1);
+            foreach (i; 0 .. p)
+            {
+                auto l = a[i + offset];
+                auto r = a[i + offset + p] * now;
+                a[i + offset] = l + r;
+                a[i + offset + p] = l - r;
+            }
+            now *= sum_e[bsf(~(cast(uint) s))];
+        }
+    }
+}
+
+void butterflyInv(mint)(mint[] a) @safe nothrow @nogc
+        if (isInstanceOf!(StaticModInt, mint))
+{
+    import core.bitop : bsf;
+
+    static immutable int g = primitiveRoot!(mint.mod());
+    int n = cast(int) a.length;
+    int h = celiPow2(n);
+
+    static bool first = true;
+    static mint[30] sum_ie;
+    if (first)
+    {
+        first = false;
+        mint[30] es, ies;
+        int cnt2 = bsf(mint.mod() - 1);
+        mint e = mint(g).pow((mint.mod() - 1) >> cnt2);
+        mint ie = e.inv();
+        foreach_reverse (i; 2 .. cnt2 + 1)
+        {
+            es[i - 2] = e;
+            ies[i - 2] = ie;
+            e *= e;
+            ie *= ie;
+        }
+        mint now = 1;
+        foreach (i; 0 .. cnt2 - 2 + 1)
+        {
+            sum_ie[i] = ies[i] * now;
+            now *= es[i];
+        }
+    }
+
+    foreach_reverse (ph; 1 .. h + 1)
+    {
+        int w = 1 << (ph - 1), p = 1 << (h - ph);
+        mint inow = 1;
+        foreach (s; 0 .. w)
+        {
+            int offset = s << (h - ph + 1);
+            foreach (i; 0 .. p)
+            {
+                auto l = a[i + offset];
+                auto r = a[i + offset + p];
+                a[i + offset] = l + r;
+                a[i + offset + p] = mint(cast(ulong)(mint.mod() + l.val() - r.val()) * inow.val());
+            }
+            inow *= sum_ie[bsf(~(cast(uint) s))];
+        }
+    }
+}
+
+mint[] convolution(mint)(mint[] a, mint[] b) @safe nothrow 
+        if (isInstanceOf!(StaticModInt, mint))
+{
+    import std.algorithm : min, swap;
+
+    int n = cast(int) a.length, m = cast(int) b.length;
+    if (!n || !m)
+        return [];
+    if (min(n, m) <= 60)
+    {
+        if (n < m)
+        {
+            swap(n, m);
+            swap(a, b);
+        }
+        auto ans = new mint[](n + m - 1);
+        foreach (i; 0 .. n)
+            foreach (j; 0 .. m)
+                ans[i + j] += a[i] * b[j];
+        return ans;
+    }
+    int z = 1 << celiPow2(n + m - 1);
+    a.length = z;
+    butterfly(a);
+    b.length = z;
+    butterfly(b);
+    foreach (i; 0 .. z)
+        a[i] *= b[i];
+    butterflyInv(a);
+    a.length = n + m - 1;
+    mint iz = mint(z).inv();
+    foreach (i; 0 .. n + m - 1)
+        a[i] *= iz;
+    return a;
+}
+
+T[] convolution(uint mod = 998_244_353, T)(T[] a, T[] b) @safe nothrow 
+        if (isIntegral!(T))
+{
+    int n = cast(int)(a.length), m = cast(int)(b.length);
+    if (!n || !m)
+        return [];
+    alias mint = StaticModInt!(mod);
+    auto a2 = new mint[](n), b2 = new mint[](m);
+    foreach (i; 0 .. n)
+        a2[i] = mint(a[i]);
+    foreach (i; 0 .. m)
+        b2[i] = mint(b[i]);
+    auto c2 = convolution(a2, b2);
+    auto c = new T[](n + m - 1);
+    foreach (i; 0 .. n + m - 1)
+        c[i] = c2[i].val();
+    return c;
+}
+
+long[] convolutionLL(long[] a, long[] b) @safe nothrow
+{
+    int n = cast(int)(a.length), m = cast(int)(b.length);
+    if (!n || !m)
+        return [];
+    static immutable ulong MOD1 = 90 * (2 ^^ 23) + 1;
+    static immutable ulong MOD2 = 10 * (2 ^^ 24) + 1;
+    static immutable ulong MOD3 = 14 * (2 ^^ 25) + 1;
+    static assert(MOD1 == 754_974_721 && MOD2 == 167_772_161 && MOD3 == 469_762_049);
+    static immutable ulong M2M3 = MOD2 * MOD3;
+    static immutable ulong M1M3 = MOD1 * MOD3;
+    static immutable ulong M1M2 = MOD1 * MOD2;
+    static immutable ulong M1M2M3 = MOD1 * MOD2 * MOD3;
+    static immutable ulong i1 = invGcd(MOD2 * MOD3, MOD1)[1];
+    static immutable ulong i2 = invGcd(MOD1 * MOD3, MOD2)[1];
+    static immutable ulong i3 = invGcd(MOD1 * MOD2, MOD3)[1];
+
+    auto c1 = convolution!(MOD1)(a, b);
+    auto c2 = convolution!(MOD2)(a, b);
+    auto c3 = convolution!(MOD3)(a, b);
+
+    auto c = new long[](n + m - 1);
+    foreach (i; 0 .. n + m - 1)
+    {
+        ulong x;
+        x += (c1[i] * i1) % MOD1 * M2M3;
+        x += (c2[i] * i2) % MOD2 * M1M3;
+        x += (c3[i] * i3) % MOD3 * M1M2;
+        long diff = c1[i] - safeMod(cast(long) x, cast(long) MOD1);
+        if (diff < 0)
+            diff += MOD1;
+        static immutable ulong[5] offset = [0, 0, M1M2M3, 2 * M1M2M3, 3 * M1M2M3];
+        x -= offset[diff % 5];
+        c[i] = x;
+    }
+    return c;
+}
+// --- segtree ---
+
+struct Segtree(S, alias op, alias e)
+{
+    import std.functional : binaryFun, unaryFun;
+    import std.traits : isCallable, Parameters;
+
+    static if (is(typeof(e) : string))
+    {
+        auto unit()
+        {
+            return mixin(e);
+        }
+    }
+    else
+    {
+        alias unit = e;
+    }
+
+    this(int n)
+    {
+        auto buf = new S[](n);
+        buf[] = unit();
+        this(buf);
+    }
+
+    this(S[] v)
+    {
+        _n = cast(int) v.length;
+        log = celiPow2(_n);
+        size = 1 << log;
+        d = new S[](2 * size);
+        d[] = unit();
+        foreach (i; 0 .. _n)
+            d[size + i] = v[i];
+        foreach_reverse (i; 1 .. size)
+            update(i);
+    }
+
+    void set(int p, S x)
+    {
+        assert(0 <= p && p < _n);
+        p += size;
+        d[p] = x;
+        foreach (i; 1 .. log + 1)
+            update(p >> i);
+    }
+
+    S get(int p)
+    {
+        assert(0 <= p && p < _n);
+        return d[p + size];
+    }
+
+    S prod(int l, int r)
+    {
+        assert(0 <= l && l <= r && r <= _n);
+        S sml = unit(), smr = unit();
+        l += size;
+        r += size;
+        while (l < r)
+        {
+            if (l & 1)
+                sml = binaryFun!(op)(sml, d[l++]);
+            if (r & 1)
+                smr = binaryFun!(op)(d[--r], smr);
+            l >>= 1;
+            r >>= 1;
+        }
+        return binaryFun!(op)(sml, smr);
+    }
+
+    S allProd()
+    {
+        return d[1];
+    }
+
+    int maxRight(alias f)(int l)
+    {
+        return maxRight(l, &unaryFun!(f));
+    }
+
+    int maxRight(F)(int l, F f) if (isCallable!F && Parameters!(F).length == 1)
+    {
+        assert(0 <= l && l <= _n);
+        assert(f(unit()));
+        if (l == _n)
+            return _n;
+        l += size;
+        S sm = unit();
+        do
+        {
+            while (l % 2 == 0)
+                l >>= 1;
+            if (!f(binaryFun!(op)(sm, d[l])))
+            {
+                while (l < size)
+                {
+                    l = 2 * l;
+                    if (f(binaryFun!(op)(sm, d[l])))
+                    {
+                        sm = binaryFun!(op)(sm, d[l]);
+                        l++;
+                    }
+                }
+                return l - size;
+            }
+            sm = binaryFun!(op)(sm, d[l]);
+            l++;
+        }
+        while ((l & -l) != l);
+        return _n;
+    }
+
+    int minLeft(alias f)(int r)
+    {
+        return minLeft(r, &unaryFun!(f));
+    }
+
+    int minLeft(F)(int r, F f) if (isCallable!F && Parameters!(F).length == 1)
+    {
+        assert(0 <= r && r <= _n);
+        assert(f(unit()));
+        if (r == 0)
+            return 0;
+        r += size;
+        S sm = unit();
+        do
+        {
+            r--;
+            while (r > 1 && (r % 2))
+                r >>= 1;
+            if (!f(binaryFun!(op)(d[r], sm)))
+            {
+                while (r < size)
+                {
+                    r = 2 * r + 1;
+                    if (f(binaryFun!(op)(d[r], sm)))
+                    {
+                        sm = binaryFun!(op)(d[r], sm);
+                        r--;
+                    }
+                }
+                return r + 1 - size;
+            }
+            sm = binaryFun!(op)(d[r], sm);
+        }
+        while ((r & -r) != r);
+        return 0;
+    }
+
+private:
+    int _n = 0, size = 1, log = 0;
+    S[] d = [unit(), unit()];
+    void update(int k)
+    {
+        d[k] = binaryFun!(op)(d[2 * k], d[2 * k + 1]);
+    }
+}
+// --- math ---
+
+import std.typecons : Tuple;
+
+long powMod(long x, long n, long m) @safe pure nothrow @nogc
+{
+    assert(0 <= n && 1 <= m);
+    if (m == 1)
+        return 0;
+    Barrett bt = Barrett(cast(uint) m);
+    uint r = 1, y = cast(uint) safeMod(x, m);
+    while (n)
+    {
+        if (n & 1)
+            r = bt.mul(r, y);
+        y = bt.mul(y, y);
+        n >>= 1;
+    }
+    return r;
+}
+
+long invMod(long x, long m) @safe pure nothrow @nogc
+{
+    assert(1 <= m);
+    auto z = invGcd(x, m);
+    assert(z[0] == 1);
+    return z[1];
+}
+
+Tuple!(long, long) crt(long[] r, long[] m) @safe pure nothrow @nogc
+{
+    assert(r.length == m.length);
+    long r0 = 0, m0 = 1;
+    foreach (i; 0 .. r.length)
+    {
+        assert(1 <= m[i]);
+        long r1 = safeMod(r[i], m[i]);
+        long m1 = m[i];
+        if (m0 < m1)
+        {
+            auto tmp = r0;
+            r0 = r1;
+            r1 = tmp;
+            tmp = m0;
+            m0 = m1;
+            m1 = tmp;
+        }
+        if (m0 % m1 == 0)
+        {
+            if (r0 % m1 != r1)
+                return Tuple!(long, long)(0, 0);
+            continue;
+        }
+        long g, im;
+        {
+            auto tmp = invGcd(m0, m1);
+            g = tmp[0];
+            im = tmp[1];
+        }
+        long u1 = m1 / g;
+        if ((r1 - r0) % g)
+            return Tuple!(long, long)(0, 0);
+        long x = (r1 - r0) / g % u1 * im % u1;
+        r0 += x * m0;
+        m0 *= u1;
+        if (r0 < 0)
+            r0 += m0;
+    }
+    return Tuple!(long, long)(r0, m0);
+}
+
+long floorSum(long n, long m, long a, long b) @safe pure nothrow @nogc
+{
+    long ans;
+    if (m <= a)
+    {
+        ans += (n - 1) * n * (a / m) / 2;
+        a %= m;
+    }
+    if (m <= b)
+    {
+        ans += n * (b / m);
+        b %= m;
+    }
+    long y_max = (a * n + b) / m, x_max = (y_max * m - b);
+    if (y_max == 0)
+        return ans;
+    ans += (n - (x_max + a - 1) / a) * y_max;
+    ans += floorSum(y_max, a, m, (a - x_max % a) % a);
+    return ans;
+}
+// --- acl ---
 // --- mincostflow ---
 
 struct MCFGraph(Cap, Cost)
@@ -1097,189 +1319,185 @@ private:
     Tuple!(int, int)[] pos;
     _edge[][] g;
 }
-// --- scc ---
+// --- maxflow ---
 
-struct SccGraph
+struct MFGraph(Cap)
 {
-    this(int n) @safe nothrow
-    {
-        internal = SccGraphImpl(n);
-    }
+    import std.typecons : Tuple;
 
-    void addEdge(int from, int to) @safe nothrow
-    {
-        int n = internal.numVerticles();
-        assert(0 <= from && from < n);
-        assert(0 <= to && to < n);
-        internal.addEdge(from, to);
-    }
-
-    int[][] scc() @safe nothrow
-    {
-        return internal.scc();
-    }
-
-private:
-    SccGraphImpl internal;
-}
-// --- segtree ---
-
-struct Segtree(S, alias op, alias e)
-{
-    import std.functional : binaryFun, unaryFun;
-    import std.traits : isCallable, Parameters;
-
-    static if (is(typeof(e) : string))
-    {
-        auto unit()
-        {
-            return mixin(e);
-        }
-    }
-    else
-    {
-        alias unit = e;
-    }
-
+public:
     this(int n)
     {
-        auto buf = new S[](n);
-        buf[] = unit();
-        this(buf);
+        _n = n;
+        g = new _edge[][](n);
     }
 
-    this(S[] v)
+    int addEdge(int from, int to, Cap cap)
     {
-        _n = cast(int) v.length;
-        log = celiPow2(_n);
-        size = 1 << log;
-        d = new S[](2 * size);
-        d[] = unit();
-        foreach (i; 0 .. _n)
-            d[size + i] = v[i];
-        foreach_reverse (i; 1 .. size)
-            update(i);
+        assert(0 <= from && from < _n);
+        assert(0 <= to && to < _n);
+        assert(0 <= cap);
+        int m = cast(int) pos.length;
+        pos ~= Tuple!(int, int)(from, cast(int)(g[from].length));
+        int from_id = cast(int) g[from].length;
+        int to_id = cast(int) g[to].length;
+        if (from == to)
+            to_id++;
+        g[from] ~= _edge(to, to_id, cap);
+        g[to] ~= _edge(from, from_id, 0);
+        return m;
     }
 
-    void set(int p, S x)
+    struct Edge
     {
-        assert(0 <= p && p < _n);
-        p += size;
-        d[p] = x;
-        foreach (i; 1 .. log + 1)
-            update(p >> i);
+        int from, to;
+        Cap cap, flow;
     }
 
-    S get(int p)
+    Edge getEdge(int i)
     {
-        assert(0 <= p && p < _n);
-        return d[p + size];
+        int m = cast(int)(pos.length);
+        assert(0 <= i && i < m);
+        auto _e = g[pos[i][0]][pos[i][1]];
+        auto _re = g[_e.to][_e.rev];
+        return Edge(pos[i][0], _e.to, _e.cap + _re.cap, _re.cap);
     }
 
-    S prod(int l, int r)
+    Edge[] edges()
     {
-        assert(0 <= l && l <= r && r <= _n);
-        S sml = unit(), smr = unit();
-        l += size;
-        r += size;
-        while (l < r)
+        int m = cast(int)(pos.length);
+        Edge[] result;
+        foreach (i; 0 .. m)
+            result ~= getEdge(i);
+        return result;
+    }
+
+    void changeEdge(int i, Cap new_cap, Cap new_flow)
+    {
+        int m = cast(int)(pos.length);
+        assert(0 <= i && i < m);
+        assert(0 <= new_flow && new_flow <= new_cap);
+        auto _e = &g[pos[i][0]][pos[i][1]];
+        auto _re = &g[_e.to][_e.rev];
+        _e.cap = new_cap - new_flow;
+        _re.cap = new_flow;
+    }
+
+    Cap flow(int s, int t)
+    {
+        return flow(s, t, Cap.max);
+    }
+
+    Cap flow(int s, int t, Cap flow_limit)
+    {
+        import std.container : DList;
+        import std.algorithm : min;
+
+        assert(0 <= s && s < _n);
+        assert(0 <= t && t < _n);
+        assert(s != t);
+
+        auto level = new int[](_n), iter = new int[](_n);
+        DList!int que;
+
+        void bfs()
         {
-            if (l & 1)
-                sml = binaryFun!(op)(sml, d[l++]);
-            if (r & 1)
-                smr = binaryFun!(op)(d[--r], smr);
-            l >>= 1;
-            r >>= 1;
-        }
-        return binaryFun!(op)(sml, smr);
-    }
-
-    S allProd()
-    {
-        return d[1];
-    }
-
-    int maxRight(alias f)(int l)
-    {
-        return maxRight(l, &unaryFun!(f));
-    }
-
-    int maxRight(F)(int l, F f) if (isCallable!F && Parameters!(F).length == 1)
-    {
-        assert(0 <= l && l <= _n);
-        assert(f(unit()));
-        if (l == _n)
-            return _n;
-        l += size;
-        S sm = unit();
-        do
-        {
-            while (l % 2 == 0)
-                l >>= 1;
-            if (!f(binaryFun!(op)(sm, d[l])))
+            level[] = -1;
+            level[s] = 0;
+            que.clear();
+            que.insertBack(s);
+            while (!que.empty)
             {
-                while (l < size)
+                int v = que.front;
+                que.removeFront();
+                foreach (e; g[v])
                 {
-                    l = 2 * l;
-                    if (f(binaryFun!(op)(sm, d[l])))
-                    {
-                        sm = binaryFun!(op)(sm, d[l]);
-                        l++;
-                    }
+                    if (e.cap == 0 || level[e.to] >= 0)
+                        continue;
+                    level[e.to] = level[v] + 1;
+                    if (e.to == t)
+                        return;
+                    que.insertBack(e.to);
                 }
-                return l - size;
             }
-            sm = binaryFun!(op)(sm, d[l]);
-            l++;
         }
-        while ((l & -l) != l);
-        return _n;
-    }
 
-    int minLeft(alias f)(int r)
-    {
-        return minLeft(r, &unaryFun!(f));
-    }
-
-    int minLeft(F)(int r, F f) if (isCallable!F && Parameters!(F).length == 1)
-    {
-        assert(0 <= r && r <= _n);
-        assert(f(unit()));
-        if (r == 0)
-            return 0;
-        r += size;
-        S sm = unit();
-        do
+        Cap dfs(int v, Cap up)
         {
-            r--;
-            while (r > 1 && (r % 2))
-                r >>= 1;
-            if (!f(binaryFun!(op)(d[r], sm)))
+            if (v == s)
+                return up;
+            Cap res = 0;
+            int level_v = level[v];
+            for (; iter[v] < cast(int)(g[v].length); iter[v]++)
             {
-                while (r < size)
-                {
-                    r = 2 * r + 1;
-                    if (f(binaryFun!(op)(d[r], sm)))
-                    {
-                        sm = binaryFun!(op)(d[r], sm);
-                        r--;
-                    }
-                }
-                return r + 1 - size;
+                auto i = iter[v];
+                auto e = g[v][i];
+                if (level_v <= level[e.to] || g[e.to][e.rev].cap == 0)
+                    continue;
+                Cap d = dfs(e.to, min(up - res, g[e.to][e.rev].cap));
+                if (d <= 0)
+                    continue;
+                g[v][i].cap += d;
+                g[e.to][e.rev].cap -= d;
+                res += d;
+                if (res == up)
+                    break;
             }
-            sm = binaryFun!(op)(d[r], sm);
+            return res;
         }
-        while ((r & -r) != r);
-        return 0;
+
+        Cap flow = 0;
+        while (flow < flow_limit)
+        {
+            bfs();
+            if (level[t] == -1)
+                break;
+            iter[] = 0;
+            while (flow < flow_limit)
+            {
+                Cap f = dfs(t, flow_limit - flow);
+                if (!f)
+                    break;
+                flow += f;
+            }
+        }
+        return flow;
+    }
+
+    bool[] minCut(int s)
+    {
+        import std.container : DList;
+
+        auto visited = new bool[](_n);
+        DList!int que;
+        que.insertBack(s);
+        while (!que.empty)
+        {
+            int p = que.front;
+            que.removeFront();
+            visited[p] = true;
+            foreach (e; g[p])
+            {
+                if (e.cap && !visited[e.to])
+                {
+                    visited[e.to] = true;
+                    que.insertBack(e.to);
+                }
+            }
+        }
+        return visited;
     }
 
 private:
-    int _n = 0, size = 1, log = 0;
-    S[] d = [unit(), unit()];
-    void update(int k)
+    struct _edge
     {
-        d[k] = binaryFun!(op)(d[2 * k], d[2 * k + 1]);
+        int to, rev;
+        Cap cap;
     }
+
+    int _n;
+    Tuple!(int, int)[] pos;
+    _edge[][] g;
 }
 // --- string ---
 
@@ -1616,264 +1834,79 @@ private:
     bool[] _answer;
     SccGraphImpl scc;
 }
-// --- internal_math ---
+// --- dsu ---
 
-import std.typecons : Tuple;
-
-ulong safeMod(long x, long m) @safe pure nothrow @nogc
+struct Dsu
 {
-    x %= m;
-    if (x < 0)
-        x += m;
-    return x;
-}
-
-ulong[2] umul128(ulong a, ulong b) @safe @nogc pure nothrow
-{
-    ulong au = a >> 32;
-    ulong bu = b >> 32;
-    ulong al = a & ((1UL << 32) - 1);
-    ulong bl = b & ((1UL << 32) - 1);
-    ulong t = al * bl;
-    ulong w3 = t & ((1UL << 32) - 1);
-    ulong k = t >> 32;
-    t = au * bl + k;
-    k = t & ((1UL << 32) - 1);
-    ulong w1 = t >> 32;
-    t = al * bu + k;
-    k = t >> 32;
-    return [au * bu + w1 + k, t << 32 + w3];
-}
-
-struct Barrett
-{
-    uint _m;
-    ulong im;
-    this(uint m) @safe @nogc pure nothrow
+public:
+    this(long n) @safe nothrow
     {
-        _m = m;
-        im = (cast(ulong)(-1)) / m + 1;
+        _n = cast(int) n, parent_or_size = new int[](n);
+        parent_or_size[] = -1;
     }
 
-    uint umod() @safe @nogc pure nothrow
+    int merge(long a, long b) @safe nothrow @nogc
     {
-        return _m;
-    }
-
-    uint mul(uint a, uint b) @safe @nogc pure nothrow
-    {
-        ulong z = a;
-        z *= b;
-        ulong x = umul128(z, im)[0];
-        uint v = cast(uint)(z - x * _m);
-        if (_m <= v)
-            v += _m;
-        return v;
-    }
-}
-
-long ctPowMod(long x, long n, int m) @safe pure nothrow @nogc
-{
-    if (m == 1)
-        return 0;
-    uint _m = cast(uint) m;
-    ulong r = 1;
-    ulong y = safeMod(x, m);
-    while (n)
-    {
-        if (n & 1)
-            r = (r * y) % _m;
-        y = (y * y) % _m;
-        n >>= 1;
-    }
-    return r;
-}
-
-bool ctIsPrime(int n) @safe pure nothrow @nogc
-{
-    if (n <= 1)
-        return false;
-    if (n == 2 || n == 7 || n == 61)
-        return true;
-    if (n % 2 == 0)
-        return false;
-    long d = n - 1;
-    while (d % 2 == 0)
-        d /= 2;
-    foreach (a; [2, 7, 61])
-    {
-        long t = d;
-        long y = ctPowMod(a, t, n);
-        while (t != n - 1 && y != 1 && y != n - 1)
+        assert(0 <= a && a < _n);
+        assert(0 <= b && b < _n);
+        int x = leader(a), y = leader(b);
+        if (x == y)
+            return x;
+        if (-parent_or_size[x] < -parent_or_size[y])
         {
-            y = y * y % n;
-            t <<= 1;
+            auto tmp = x;
+            x = y;
+            y = tmp;
         }
-        if (y != n - 1 && t % 2 == 0)
+        parent_or_size[x] += parent_or_size[y];
+        parent_or_size[y] = x;
+        return x;
+    }
+
+    bool same(long a, long b) @safe nothrow @nogc
+    {
+        assert(0 <= a && a < _n);
+        assert(0 <= b && b < _n);
+        return leader(a) == leader(b);
+    }
+
+    int leader(long a) @safe nothrow @nogc
+    {
+        assert(0 <= a && a < _n);
+        if (parent_or_size[a] < 0)
+            return cast(int) a;
+        return parent_or_size[a] = leader(parent_or_size[a]);
+    }
+
+    int size(long a) @safe nothrow @nogc
+    {
+        assert(0 <= a && a < _n);
+        return -parent_or_size[leader(a)];
+    }
+
+    int[][] groups() @safe nothrow
+    {
+        auto leader_buf = new int[](_n), group_size = new int[](_n);
+        foreach (i; 0 .. _n)
         {
-            return false;
+            leader_buf[i] = leader(i);
+            group_size[leader_buf[i]]++;
         }
+        auto result = new int[][](_n);
+        foreach (i; 0 .. _n)
+            result[i].reserve(group_size[i]);
+        foreach (i; 0 .. _n)
+            result[leader_buf[i]] ~= i;
+        int[][] filtered;
+        foreach (r; result)
+            if (r.length != 0)
+                filtered ~= r;
+        return filtered;
     }
-    return true;
-}
 
-enum bool isPrime(int n) = ctIsPrime(n);
-
-Tuple!(long, long) invGcd(long a, long b) @safe pure nothrow @nogc
-{
-    a = safeMod(a, b);
-    if (a == 0)
-        return Tuple!(long, long)(b, 0);
-    long s = b, t = a, m0 = 0, m1 = 1;
-    while (t)
-    {
-        long u = s / t;
-        s -= t * u;
-        m0 -= m1 * u;
-        long tmp = s;
-        s = t;
-        t = tmp;
-        tmp = m0;
-        m0 = m1;
-        m1 = tmp;
-    }
-    if (m0 < 0)
-        m0 += b / s;
-    return Tuple!(long, long)(s, m0);
-}
-
-int ctPrimitiveRoot(int m) @safe pure nothrow @nogc
-{
-    if (m == 2)
-        return 1;
-    if (m == 167_772_161)
-        return 3;
-    if (m == 469_762_049)
-        return 3;
-    if (m == 754_974_721)
-        return 11;
-    if (m == 998_244_353)
-        return 3;
-    int[20] divs;
-    divs[0] = 2;
-    int cnt = 1;
-    int x = (m - 1) / 2;
-    while (x % 2 == 0)
-        x /= 2;
-    for (int i = 3; (cast(long) i) * i <= x; i += 2)
-        if (x % i == 0)
-        {
-            divs[cnt++] = i;
-            while (x % i == 0)
-                x /= i;
-        }
-    if (x > 1)
-        divs[cnt++] = x;
-    for (int g = 2;; g++)
-    {
-        bool ok = true;
-        foreach (i; 0 .. cnt)
-            if (ctPowMod(g, (m - 1) / divs[i], m) == 1)
-            {
-                ok = false;
-                break;
-            }
-        if (ok)
-            return g;
-    }
-}
-
-enum primitiveRoot(int m) = ctPrimitiveRoot(m);
-// --- math ---
-
-import std.typecons : Tuple;
-
-long powMod(long x, long n, long m) @safe pure nothrow @nogc
-{
-    assert(0 <= n && 1 <= m);
-    if (m == 1)
-        return 0;
-    Barrett bt = Barrett(cast(uint) m);
-    uint r = 1, y = cast(uint) safeMod(x, m);
-    while (n)
-    {
-        if (n & 1)
-            r = bt.mul(r, y);
-        y = bt.mul(y, y);
-        n >>= 1;
-    }
-    return r;
-}
-
-long invMod(long x, long m) @safe pure nothrow @nogc
-{
-    assert(1 <= m);
-    auto z = invGcd(x, m);
-    assert(z[0] == 1);
-    return z[1];
-}
-
-Tuple!(long, long) crt(long[] r, long[] m) @safe pure nothrow @nogc
-{
-    assert(r.length == m.length);
-    long r0 = 0, m0 = 1;
-    foreach (i; 0 .. r.length)
-    {
-        assert(1 <= m[i]);
-        long r1 = safeMod(r[i], m[i]);
-        long m1 = m[i];
-        if (m0 < m1)
-        {
-            auto tmp = r0;
-            r0 = r1;
-            r1 = tmp;
-            tmp = m0;
-            m0 = m1;
-            m1 = tmp;
-        }
-        if (m0 % m1 == 0)
-        {
-            if (r0 % m1 != r1)
-                return Tuple!(long, long)(0, 0);
-            continue;
-        }
-        long g, im;
-        {
-            auto tmp = invGcd(m0, m1);
-            g = tmp[0];
-            im = tmp[1];
-        }
-        long u1 = m1 / g;
-        if ((r1 - r0) % g)
-            return Tuple!(long, long)(0, 0);
-        long x = (r1 - r0) / g % u1 * im % u1;
-        r0 += x * m0;
-        m0 *= u1;
-        if (r0 < 0)
-            r0 += m0;
-    }
-    return Tuple!(long, long)(r0, m0);
-}
-
-long floorSum(long n, long m, long a, long b) @safe pure nothrow @nogc
-{
-    long ans;
-    if (m <= a)
-    {
-        ans += (n - 1) * n * (a / m) / 2;
-        a %= m;
-    }
-    if (m <= b)
-    {
-        ans += n * (b / m);
-        b %= m;
-    }
-    long y_max = (a * n + b) / m, x_max = (y_max * m - b);
-    if (y_max == 0)
-        return ans;
-    ans += (n - (x_max + a - 1) / a) * y_max;
-    ans += floorSum(y_max, a, m, (a - x_max % a) % a);
-    return ans;
+private:
+    int _n;
+    int[] parent_or_size;
 }
 // --- modint ---
 
